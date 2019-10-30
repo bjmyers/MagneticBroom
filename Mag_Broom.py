@@ -50,11 +50,11 @@ def genElec(num):
     
     x = np.random.uniform(-5,5,num) * u.mm
     y = np.random.uniform(-5,5,num) * u.mm
-    z = np.zeros(num) * u.mm
+    z = 9*np.ones(num) * u.mm
     
     vx = np.zeros(num) * u.m/u.s
     vy = np.zeros(num) * u.m/u.s
-    vz = 100*np.ones(num) * u.m/u.s
+    vz = 88000*np.ones(num) * u.m/u.s
     
     return Electron(x,y,z,vx,vy,vz)
 
@@ -66,7 +66,8 @@ def getB(e):
     bz = np.zeros(num)
 
     infield = np.logical_and(e.z > 10*u.mm, e.z < 15 * u.mm)
-    bx[infield] = 1
+    # bx[infield] = 0.5
+    bx[infield] = 10000
     by[infield] = 0
     bz[infield] = 0
     
@@ -74,27 +75,59 @@ def getB(e):
     by = by << u.gauss
     bz = bz << u.gauss
     
-    return (bx,by,bz)
+    return bx, by, bz
 
+numElec = 1
 
-e = genElec(100)
-dt = 1 * u.us
+e = genElec(numElec)
+dt = 0.0001 * u.ns
 
-for i in range(105):
+e.z = np.ones(numElec)*12*u.mm
+
+bx, by, bz = getB(e)
+
+ax, ay, az = e.findAccel(bx,by,bz)
+
+e.updateVel(ax, ay, az, dt)
+
+from tqdm import tqdm
+for i in range(1000):
     
     bx, by, bz = getB(e)
     
     ax, ay, az = e.findAccel(bx,by,bz)
     
+    x = np.sqrt(e.vx**2 + e.vy**2 + e.vz**2)
+    
+    v0 = (e.vx,e.vy,e.vz)
+    p0 = (e.x,e.y,e.z)
+
+    e.updateVel(ax, ay, az, dt/2)
+    e.updatePosn(dt/2)
+    
+    bx, by, bz = getB(e)
+    
+    ax, ay, az = e.findAccel(bx,by,bz)
+    
+    e.vx = v0[0]
+    e.xy = v0[1]
+    e.vz = v0[2]
+    e.x = p0[0]
+    e.y = p0[1]
+    e.z = p0[2]
+    
     e.updateVel(ax, ay, az, dt)
     e.updatePosn(dt)
+    
+    print(np.sqrt(e.vx**2 + e.vy**2 + e.vz**2) - x)
 
+# Expected angle: 0.5232 rad deg
+theta = np.arcsin((e.charge * (0.5*u.gauss) * 5*u.mm / e.mass / (88000*u.m/u.s)).to(''))
 
+# Actual Angle: 24.0848 deg
+actual_theta = np.arctan(e.vy/e.vz)
 
-
-
-
-
+# print(np.sqrt(e.vx**2 + e.vy**2 + e.vz**2))
 
 
 
