@@ -68,9 +68,12 @@ class Electron:
         return ax,ay,az
 
 
-def genElec(num):
-    # This function is used to generate an Electron Object given a number of
-    # electrons
+def genElec(num, angles):
+    # This function is used to generate an Electron Object
+    # Inputs:
+    #   - num: The number of electrons to be generated
+    #   - angles: The angles at which the electrons will enter the field, angles
+    #     are measured from the z-axis, towards the y-axis
     
     # x and y positions are randomly placed in a 10x10 mm box
     x = np.random.uniform(-5,5,num) * u.mm
@@ -78,14 +81,24 @@ def genElec(num):
     # z is set to 9.5mm, so it is just about to enter the magnetic field
     z = 9.5*np.ones(num) * u.mm
     
-    # Give it an initial velocity, for this basic simulation we will have it
-    # travelling only in the z direction
+    # Give it an initial velocity using the incident angles
     vx = np.zeros(num) * u.m/u.s
-    vy = np.zeros(num) * u.m/u.s
-    vz = 88000*np.ones(num) * u.m/u.s
+    vy = 88000*np.sin(angles) * u.m/u.s
+    vz = 88000*np.cos(angles) * u.m/u.s
     
     # Return the electron object
     return Electron(x,y,z,vx,vy,vz)
+
+
+def genAngles(num, max):
+    # This function generates a list of angles at which electrons will enter
+    # the magnetic field
+    # Inputs:
+    #   - num: The number of angles to be generated
+    #   - max: The maximum angle allowed in Radians
+    # Note: Angles are generated uniformly from -max to max
+    return np.random.uniform(-max,max,num) << u.rad
+
 
 def getB(e):
     # This function takes in an Electron object and returns the magnetic field
@@ -111,10 +124,16 @@ def getB(e):
     return bx, by, bz
 
 # Get the number of electrons to simulate
-numElec = 1
+numElec = 100
+
+# Initialize a maximum incident angle
+maxang = (10 * u.deg).to('rad').value
+
+# Generate incident angles
+angles = genAngles(numElec,maxang)
 
 # Generate those electrons
-e = genElec(numElec)
+e = genElec(numElec,angles)
 
 # Initialize our time step
 dt = 0.1 * u.ns
@@ -125,60 +144,55 @@ ys = []
 zs = []
 
 # Iterate through 1000 time steps
-for i in range(1000):
+from tqdm import tqdm
+for i in tqdm(range(1000)):
     
-    # Get the magnetic field
+    # Find the magnetic field and acceleration at the electrons current position
     bx, by, bz = getB(e)
-    
-    # Get the acceleration that each electron feels
     ax, ay, az = e.findAccel(bx,by,bz)
     
-    # Update velocity and then position
+    # Save the electron's position and velocity for later
+    v0 = (e.vx.copy(),e.vy.copy(),e.vz.copy())
+    p0 = (e.x.copy(),e.y.copy(),e.z.copy())
+
+    # Move the electrons half a step
+    e.updateVel(ax, ay, az, dt/2)
+    e.updatePosn(dt/2)
+    
+    # Find the magnetic field and acceleration at this half step position
+    bx, by, bz = getB(e)
+    ax, ay, az = e.findAccel(bx,by,bz)
+    
+    # Move back to the original position
+    e.vx = v0[0]
+    e.vy = v0[1]
+    e.vz = v0[2]
+    e.x = p0[0]
+    e.y = p0[1]
+    e.z = p0[2]
+    
+    # Update velocity and position using the half step values
     e.updateVel(ax, ay, az, dt)
     e.updatePosn(dt)
-
-    
-    # -------------------------------------------------------------
-    # Commented out is an experimental midpoint stepping function
-    
-    # v0 = (e.vx,e.vy,e.vz)
-    # p0 = (e.x,e.y,e.z)
-
-    # e.updateVel(ax, ay, az, dt/2)
-    # e.updatePosn(dt/2)
-    
-    # bx, by, bz = getB(e)
-    # 
-    # ax, ay, az = e.findAccel(bx,by,bz)
-    # 
-    # e.vx = v0[0]
-    # e.xy = v0[1]
-    # e.vz = v0[2]
-    # e.x = p0[0]
-    # e.y = p0[1]
-    # e.z = p0[2]
-    # 
-    # e.updateVel(ax, ay, az, dt)
-    # e.updatePosn(dt)
-    # -------------------------------------------------------------
     
     
-    # Record the y and z positions for later
+    # Record the y and z positions for later plotting
     ys.append(e.y.value[0])
     zs.append(e.z.value[0])
 
 
-# Expected angle: 0.5232 rad 
-# Exit angle based on  theoretical mathematical calculation
-theta = np.arcsin((e.charge * (0.5*u.gauss) * 5*u.mm / e.mass / (88000*u.m/u.s)).to(''))
+# Find the expected exit angles:
+predicted_theta =  np.arcsin(np.sin(angles) - (e.charge * (0.5 * u.gauss) * (5 * u.mm) / e.mass / (88000 * u.m/u.s)))
 
-# Actual Angle: 0.52237 rad
-# Exit angle calculated for this photon
+# Find the actual exit angles for these electrons:
 actual_theta = np.arctan(e.vy/e.vz)
 
-# Print the final velocity, the particle has increased its velocity slightly
-# This is something we should deal with in the future, but is not significant now
-print(np.sqrt(e.vx**2 + e.vy**2 + e.vz**2))
+# Find the error in angle
+theta_err = np.abs(predicted_theta) - np.abs(actual_theta)
+
+# Find how much the electron has accelerated. In a perfect simulation, this
+# velocity error should be zero and the speed of the electrons should not change
+vel_err = (88000 * u.m/u.s) - np.sqrt(e.vx**2 + e.vy**2 + e.vz**2)
 
 
 # Plot the y and z positions of the electron
