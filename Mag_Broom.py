@@ -182,7 +182,7 @@ for i in tqdm(range(1000)):
 
 
 # Find the expected exit angles:
-predicted_theta =  np.arcsin(np.sin(angles) - (e.charge * (0.5 * u.gauss) * (5 * u.mm) / e.mass / (88000 * u.m/u.s)))
+predicted_theta =  np.arcsin(np.sin(angles) + (e.charge * (0.5 * u.gauss) * (5 * u.mm) / e.mass / (88000 * u.m/u.s)))
 
 # Find the actual exit angles for these electrons:
 actual_theta = np.arctan(e.vy/e.vz)
